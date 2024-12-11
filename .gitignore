@@ -1,0 +1,39 @@
+# Composer dependencies
+/vendor/
+
+# Composer lock file
+composer.lock
+
+# Environment files
+.env
+
+# IDE and editor files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Cache files
+*.cache
+
+# Temporary files
+*.tmp
+*.swp
+*.bak
+
+# User-specific files
+*.user
+*.suo
+
+# PHPUnit
+.phpunit.result.cache
+
+# Application specific
+/config/local.php
