@@ -33,7 +33,80 @@ function getDbConnection() {
         throw new \PDOException("Database connection failed: " . $e->getMessage(), (int)$e->getCode());
     }
 }
+# Helper Function
+function getCurrentQuarter() {
+    $now = new DateTime();
+    $quarter = ceil($now->format('n') / 3);
+    
+    $quarterEnd = new DateTime($now->format('Y') . '-' . (3 * $quarter) . '-' . ($quarter == 4 ? '31' : '30'));
+    $twoWeeksBefore = (clone $quarterEnd)->modify('-2 weeks');
+    
+    if ($now >= $twoWeeksBefore) {
+        $quarter = $quarter % 4 + 1;
+    }
+    
+    return $quarter;
+}
 
+function getClientDataByCurrentQuarter(){
+    try {
+        $db = getDbConnection();
+        $currentQuarter = getCurrentQuarter();
+        $year = date('Y');
+
+        $quarterStart = new DateTime("$year-". (3 * $currentQuarter - 2)."-01");
+        $quarterEnd = new DateTime("$year-".(3 * $currentQuarter)."-".($currentQuarter == 4 ? '31' : '30'));
+
+        $sql = "
+        SELECT h.URL, r.response
+        FROM iwp_new_history h
+        JOIN iwp_new_history_raw_details r ON h.historyID = r.historyID
+        WHERE h.type = 'clientReporting'
+        AND microtimeStarted >= :start_time 
+        AND microtimeEnded <= :end_time
+        ORDER BY h.historyID DESC
+        ";
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute([
+            ':start_time' => $quarterStart->getTimestamp(),
+            ':end_time' => $quarterEnd->getTimeStamp()
+        ]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch(PDOException $e){
+        error_log("Database error: ". $e->getMessage());
+    }
+}
+
+# Get Client Data by Year
+function getClientDataByYear(){
+    try {
+        $db = getDbConnection();
+
+        $oneYearAgo = (new DateTime())->modify('-1 year');
+    
+        $sql = "
+        SELECT h.URL, r.response
+        FROM iwp_new_history h
+        JOIN iwp_new_history_raw_details r ON h.historyID = r.historyID
+        WHERE h.type = 'clientReporting'
+        AND microtimeStarted >= :start_time
+        ORDER BY h.historyID DESC";
+    
+        $stmt = $db->prepare($sql);
+        $stmt->execute([
+            ':start_time' => $oneYearAgo->getTimestamp()
+        ]);
+        
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e){
+        // Log the error or handle it appropriately
+        error_log("Database error: ". $e->getMessage());
+        return false;
+    }
+}
+
+#Get information by Report Data
 function getClientReportingData() {
     $db = getDbConnection();
     $query = "
@@ -53,6 +126,8 @@ function getClientReportingData() {
     $stmt->execute();
     return $stmt->fetchAll();
 }
+
+
 
 function maybeUnCompress($value) {
     if(!function_exists('gzinflate') || !function_exists('gzinflate')) {
@@ -105,8 +180,32 @@ function processData($rawData) {
     return $processedData;
 }
 
+
 $app->get('/api/client-reporting', function (Request $request, Response $response) {
     $rawData = getClientReportingData();
+    $processedData = processData($rawData);
+    $response->getBody()->write(json_encode($processedData));
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+# get Years worth of client data
+$app->get('/api/yearly-client-reporting', function(Request $request, Response $response){
+    # creat method to get rawData
+    $rowData = getClientDataByYear();
+    $processedData = processData($rowData);
+    $response->getBody()->write(json_encode($processedData));
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+
+$app->get('/api/one_year_ago', function(Request $request, Response $response){
+    $oneYearAgo = (new DateTime())->modify('-1 year');
+    $response->getBody()->write(json_encode($oneYearAgo));
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+$app->get('/api/quarterly-client-report', function(Request $request, Response $response){
+    $rawData = getClientDataByCurrentQuarter();
     $processedData = processData($rawData);
     $response->getBody()->write(json_encode($processedData));
     return $response->withHeader('Content-Type', 'application/json');
