@@ -17,7 +17,6 @@ $app->setBasePath('/client_report_card');
 $app->addErrorMiddleware(true, true, true);
 
 function prevent_api_caching() {
-    nocache_headers();
     header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
     header("Cache-Control: post-check=0, pre-check=0", false);
     header("Pragma: no-cache");
