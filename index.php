@@ -16,6 +16,14 @@ $app = AppFactory::create();
 $app->setBasePath('/client_report_card');
 $app->addErrorMiddleware(true, true, true);
 
+function prevent_api_caching() {
+    nocache_headers();
+    header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+    header("Cache-Control: post-check=0, pre-check=0", false);
+    header("Pragma: no-cache");
+    header("Expires: Thu, 1 Jan 1970 00:00:00 GMT");
+}
+
 function getDbConnection() {
     global $config;
     if (!isset($config['SQL_HOST']) || !isset($config['SQL_DATABASE']) || !isset($config['SQL_USERNAME']) || !isset($config['SQL_PASSWORD'])) {
@@ -179,20 +187,51 @@ function processData($rawData) {
     }
     return $processedData;
 }
+function combineArrayDuplicates($array) {
+    if (!is_array($array) || empty($array)) {
+        return [];
+    }
+
+    $result = [];
+    foreach ($array as $item) {
+        if (!isset($item['url']) || !isset($item['response']) || !is_array($item['response'])) {
+            continue;
+        }
+
+        $url = $item['url'];
+        if (!isset($result[$url])) {
+            $result[$url] = $item;
+        } else {
+            foreach ($item['response'] as $key => $value) {
+                if (!is_numeric($value)) {
+                    continue;
+                }
+                if (isset($result[$url]['response'][$key])) {
+                    $result[$url]['response'][$key] += $value;
+                } else {
+                    $result[$url]['response'][$key] = $value;
+                }
+            }
+        }
+    }
+    return array_values($result);
+}
 
 
 $app->get('/api/client-reporting', function (Request $request, Response $response) {
-    $rawData = getClientReportingData();
-    $processedData = processData($rawData);
+    prevent_api_caching();
+    $rowData = getClientReportingData();
+    $processedData = processData($rowData);
     $response->getBody()->write(json_encode($processedData));
     return $response->withHeader('Content-Type', 'application/json');
 });
 
 # get Years worth of client data
 $app->get('/api/yearly-client-reporting', function(Request $request, Response $response){
+    prevent_api_caching();
     # creat method to get rawData
     $rowData = getClientDataByYear();
-    $processedData = processData($rowData);
+    $processedData = combineArrayDuplicates(processData($rowData));
     $response->getBody()->write(json_encode($processedData));
     return $response->withHeader('Content-Type', 'application/json');
 });
@@ -205,8 +244,9 @@ $app->get('/api/one_year_ago', function(Request $request, Response $response){
 });
 
 $app->get('/api/quarterly-client-report', function(Request $request, Response $response){
-    $rawData = getClientDataByCurrentQuarter();
-    $processedData = processData($rawData);
+    prevent_api_caching();
+    $rowData = getClientDataByCurrentQuarter();
+    $processedData = combineArrayDuplicates(processData($rowData));
     $response->getBody()->write(json_encode($processedData));
     return $response->withHeader('Content-Type', 'application/json');
 });
